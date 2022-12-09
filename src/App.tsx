@@ -1,5 +1,5 @@
 /* eslint-disable no-eval */
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import {
   Box,
@@ -9,12 +9,14 @@ import {
   MdIcon,
   Divider,
   Text,
+  useBreakpointValue,
 } from "@fugisaki/design-system";
 
 const numpad = [7, 8, 9, "÷", 4, 5, 6, "×", 1, 2, 3, "-", 0, ",", "=", "+"];
 const characters = ["+", "-", "×", "÷"];
 
 function App() {
+  const isMobile = useBreakpointValue({ base: true, sm: true, md: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -33,10 +35,14 @@ function App() {
       .replaceAll(!remove ? "/" : "÷", !remove ? "÷" : "/");
   };
 
+  const handleInputFocus = useCallback(() => {
+    if (isMobile) return;
+    inputRef.current?.focus();
+  }, [isMobile]);
+
   const handleChangeOperaton = (value: any) => {
     const valueIsNumber = !isNaN(value);
     const lastCharacterIsSpecial = isNaN(String(operation).slice(0, -1) as any);
-    console.log({ valueIsNumber, lastCharacterIsSpecial });
     if (
       (lastCharacterIsSpecial && valueIsNumber) ||
       (valueIsNumber && !lastCharacterIsSpecial)
@@ -63,18 +69,18 @@ function App() {
   };
 
   const handleRemoveLastCharacter = () => {
-    inputRef.current?.focus();
+    handleInputFocus();
     handleChangeOperaton(String(operation).slice(0, -1));
   };
 
   const handleReset = () => {
-    inputRef.current?.focus();
+    handleInputFocus();
     handleChangeOperaton("");
     setHistory([]);
   };
 
   const handleClickCharacter = (character: string | number) => {
-    inputRef.current?.focus();
+    handleInputFocus();
     if (character === "=") {
       handleCalculate();
       return;
@@ -102,7 +108,7 @@ function App() {
 
   const handleEnterPress = (event: any) => {
     if (event.key === "Enter" || event.code === "Equal") {
-      inputRef.current?.focus();
+      handleInputFocus();
       handleCalculate();
     }
   };
@@ -146,14 +152,14 @@ function App() {
   };
 
   useEffect(() => {
-    inputRef.current?.focus();
+    handleInputFocus();
 
     const interval = setInterval(() => {
       setDate(new Date());
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [handleInputFocus]);
 
   return (
     <Flex
