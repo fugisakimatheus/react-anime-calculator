@@ -178,14 +178,14 @@ function App() {
       />
       <Box
         minWidth={{ base: "100%", sm: "300px" }}
-        marginBottom="4"
+        marginBottom="3"
         paddingTop={{ base: "10", sm: "10", md: "20" }}
         paddingX="4"
       >
         <Box
           minWidth="100%"
           padding="2"
-          marginBottom="20"
+          marginBottom="12"
           borderRadius="md"
           bgColor="rgba(11, 49, 78, 0.3)"
           boxShadow="0 4px 30px rgba(0, 0, 0, 0.2)"
