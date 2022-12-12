@@ -9,29 +9,62 @@ import {
   MdIcon,
   Divider,
   Text,
+  Image,
   useBreakpointValue,
 } from "@fugisaki/design-system";
 import extractColors from "extract-colors";
+import localforage from "localforage";
+import { v4 as uuidv4 } from "uuid";
+
+localforage.config({
+  driver: localforage.INDEXEDDB,
+  name: "react-calculator",
+  version: 1.0,
+});
+
+type StorageImage = {
+  id: string;
+  image: string;
+};
+
+type RGB = {
+  r: number;
+  g: number;
+  b: number;
+};
 
 const numpad = [7, 8, 9, "÷", 4, 5, 6, "×", 1, 2, 3, "-", 0, ",", "=", "+"];
 const characters = ["+", "-", "×", "÷"];
 
 function App() {
   const isMobile = useBreakpointValue({ base: true, sm: true, md: false });
+
   const uploadRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [storageImages, setStorageImages] = useState<StorageImage[]>([]);
   const [editBackground, setEditBackground] = useState<boolean>(false);
-  const [isUploading, setIsUploading] = useState<boolean>(true);
+  const [selectedImageId, setSelectedImageId] = useState<string>("");
+  const [currentForeground, setCurrentForeground] = useState<string>("");
+  const [currentBackground, setCurrentBackground] = useState<string>("");
+  const [currentRGB, setCurrentRGB] = useState<RGB | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [operation, setOperation] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
 
+  const selectedImage =
+    storageImages.find((storageImage) => storageImage.id === selectedImageId)
+      ?.image || "./wallpaper.jpg";
+
+  const foreground = currentForeground || "#C7DAD9";
+  const background = currentBackground || "#06192E";
+  const rgb = currentRGB || { r: 11, g: 49, b: 78 };
+
   const applyRegex = (value: string, remove = false) => {
     if (!value) return value;
     // eslint-disable-next-line no-useless-escape
-    const acceptedRegex = /[^$0-9÷*×+-\/().]/g;
+    const acceptedRegex = /[^0-9÷*×+\-,\/()]/g;
     return value
       .replaceAll(acceptedRegex, "")
       .replaceAll(!remove ? "*" : "×", !remove ? "×" : "*")
@@ -43,6 +76,32 @@ function App() {
     if (isMobile) return;
     inputRef.current?.focus();
   }, [isMobile]);
+
+  const handleInitializeColors = useCallback(async () => {
+    const selectedImage = storageImages.find(
+      (image) => image.id === selectedImageId
+    );
+
+    if (!selectedImage) return;
+
+    const colors = await extractColors(selectedImage.image);
+    const sortedColors = colors.sort((a, b) => a.lightness - b.lightness);
+
+    const background = sortedColors[0];
+    const foreground = sortedColors[sortedColors.length - 1];
+
+    const isSameColor = background?.hex === foreground?.hex;
+    const isLight = isSameColor && background?.lightness > 0.5;
+    const isDark = isSameColor && background?.lightness <= 0.5;
+
+    setCurrentBackground(background?.hex);
+    setCurrentForeground(isLight ? "#000" : isDark ? "#FFF" : foreground?.hex);
+    setCurrentRGB({
+      r: background?.red || 0,
+      g: background?.green || 0,
+      b: background?.blue || 0,
+    });
+  }, [selectedImageId, storageImages]);
 
   const handleChangeOperaton = (value: any) => {
     const valueIsNumber = !isNaN(value);
@@ -117,6 +176,23 @@ function App() {
     }
   };
 
+  const handleRemoveImage = async (id: string) => {
+    const newImages = storageImages.filter((image) => image.id !== id);
+    setStorageImages(newImages);
+    await localforage.setItem("images", newImages);
+    if (selectedImageId === id) {
+      setCurrentBackground("");
+      setCurrentForeground("");
+      setCurrentRGB(null);
+      await localforage.removeItem("selectedImage");
+    }
+  };
+
+  const handleSelectImage = async (id: string) => {
+    setSelectedImageId(id);
+    await localforage.setItem("selectedImage", id);
+  };
+
   const handleLoadImage = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -128,53 +204,39 @@ function App() {
     reader.readAsDataURL(file);
     reader.onload = () => {
       const imageString = reader.result as string;
-      extractColors(imageString).then(console.log).catch(console.error);
+      setStorageImages((old) => [...old, { id: uuidv4(), image: imageString }]);
+      // extractColors(imageString).then(console.log).catch(console.error);
     };
     reader.onerror = (error) => {
       console.error("Error on load image", error);
     };
   };
 
-  const getStyles = (value: number | string) => {
-    if (typeof value === "string" && characters.includes(value)) {
-      return {
-        bgColor: "#C7DAD9",
-        color: "#06192E",
-        border: "2px solid transparent",
-        transitionDuration: "220ms",
-        _hover: {
-          bgColor: "#06192E",
-          color: "#C7DAD9",
-          borderColor: "#C7DAD9",
-        },
-        _active: {
-          bgColor: "#06192E",
-          color: "#C7DAD9",
-          borderColor: "#C7DAD9",
-        },
-      };
-    }
-
-    return {
-      bgColor: "#06192E",
-      color: "#C7DAD9",
-      transitionDuration: "220ms",
-      border: "2px solid transparent",
-      _hover: {
-        bgColor: "#C7DAD9",
-        color: "#06192E",
-        borderColor: "#06192E",
-      },
-      _active: {
-        bgColor: "#C7DAD9",
-        color: "#06192E",
-        borderColor: "#06192E",
-      },
+  useEffect(() => {
+    const handleSaveImages = async () => {
+      await localforage.setItem("images", JSON.stringify(storageImages));
     };
-  };
+    handleSaveImages();
+  }, [storageImages]);
+
+  useEffect(() => {
+    handleInitializeColors();
+  }, [selectedImageId, handleInitializeColors]);
 
   useEffect(() => {
     handleInputFocus();
+
+    const handleInitializeImages = async () => {
+      const storedImages = await localforage.getItem<string>("images");
+      const imageId = await localforage.getItem<string>("selectedImage");
+      const images = JSON.parse(storedImages || "[]") as StorageImage[];
+      if (imageId) {
+        setSelectedImageId(imageId);
+      }
+      setStorageImages(images);
+    };
+
+    handleInitializeImages();
 
     const interval = setInterval(() => {
       setDate(new Date());
@@ -183,20 +245,59 @@ function App() {
     return () => clearInterval(interval);
   }, [handleInputFocus]);
 
+  const getStyles = (value: number | string) => {
+    if (typeof value === "string" && characters.includes(value)) {
+      return {
+        bgColor: foreground,
+        color: background,
+        transitionDuration: "220ms",
+        border: `1px solid ${background}`,
+        _hover: {
+          bgColor: background,
+          color: foreground,
+          borderColor: foreground,
+        },
+        _active: {
+          bgColor: background,
+          color: foreground,
+          borderColor: foreground,
+        },
+      };
+    }
+
+    return {
+      bgColor: background,
+      color: foreground,
+      transitionDuration: "220ms",
+      border: `1px solid ${foreground}`,
+      _hover: {
+        bgColor: foreground,
+        color: background,
+        borderColor: background,
+      },
+      _active: {
+        bgColor: foreground,
+        color: background,
+        borderColor: background,
+      },
+    };
+  };
+
   return (
     <Flex
       width="100vw"
       height="100vh"
       justify="center"
-      bgColor="#99CDD1"
       filter="brightness(92%)"
       align="center"
       position="relative"
     >
       <img
-        src="./wallpaper.jpg"
+        src={selectedImage}
         alt="wallpaper"
         style={{
+          userSelect: "none",
+          pointerEvents: "none",
           position: "absolute",
           display: "block",
           objectFit: "cover",
@@ -209,83 +310,96 @@ function App() {
         <Box
           zIndex={9999999}
           position="absolute"
-          bgColor="#06192E"
+          bgColor={background}
           height={{ base: "100%", sm: "100%", md: "540px" }}
           maxWidth="800px"
           width="100%"
+          padding="2"
           borderRadius={{ base: "none", sm: "none", md: "md" }}
         >
           <Flex padding="2" justify="space-between" align="center">
-            <Flex>
-              <Button
-                variant={isUploading ? "solid" : "outline"}
-                color={isUploading ? "#06192E" : "#C7DAD9"}
-                _hover={{
-                  color: isUploading ? "#06192E" : "#C7DAD9",
-                  opacity: 0.8,
-                }}
-                _active={{
-                  color: isUploading ? "#06192E" : "#C7DAD9",
-                }}
-                size="sm"
-                marginRight="2"
-                onClick={() => setIsUploading(true)}
-              >
+            <Flex paddingX="1">
+              <Text color={foreground} fontSize="18px" fontWeight="semibold">
                 Upload de imagem
-              </Button>
-              <Button
-                variant={isUploading ? "outline" : "solid"}
-                color={!isUploading ? "#06192E" : "#C7DAD9"}
-                _hover={{
-                  color: !isUploading ? "#06192E" : "#C7DAD9",
-                  opacity: 0.8,
-                }}
-                _active={{
-                  color: !isUploading ? "#06192E" : "#C7DAD9",
-                }}
-                size="sm"
-                onClick={() => setIsUploading(false)}
-              >
-                Todas as imagens
-              </Button>
+              </Text>
             </Flex>
 
             <MdIcon
               name="MdClose"
-              color="#C7DAD9"
+              color={foreground}
               size="md"
               onClick={() => setEditBackground(false)}
             />
           </Flex>
 
-          <Flex align="center" justify="center" height="86%">
+          <Flex paddingX="3" paddingTop="2">
             <input
               ref={uploadRef}
               type="file"
               hidden
               onChange={handleLoadImage}
             />
-            <Box
+            <Flex
               onClick={() => uploadRef.current?.click()}
-              border="2px dashed #C7DAD9"
-              padding="8"
-              width="500px"
+              border={`2px solid ${foreground}`}
+              padding="1"
               cursor="pointer"
-              textAlign="center"
-              borderRadius="sm"
+              align="center"
+              borderRadius="md"
+              _hover={{ opacity: 0.8 }}
             >
-              <MdIcon name="MdImage" color="#C7DAD9" size="lg" />
-              <Text color="#C7DAD9" fontWeight="semibold" marginTop="4">
+              <MdIcon
+                name="MdImage"
+                color={foreground}
+                size="lg"
+                marginRight="1"
+              />
+              <Text
+                color={foreground}
+                fontSize="14px"
+                fontWeight="semibold"
+                marginRight="1"
+              >
                 Fazer upload de imagem
               </Text>
-            </Box>
+            </Flex>
           </Flex>
+
+          <SimpleGrid padding="3" gap="3" columns={3}>
+            {storageImages.map(({ id, image }) => (
+              <Box key={id} position="relative" width="fit-content">
+                <Image
+                  src={image}
+                  cursor="pointer"
+                  maxHeight="150px"
+                  border={
+                    selectedImageId === id
+                      ? "3px solid lime"
+                      : "3px solid transparent"
+                  }
+                  onClick={() => handleSelectImage(id)}
+                />
+                <Box position="absolute" top="-6px" right="-6px">
+                  <Box
+                    backgroundColor="white"
+                    width="24px"
+                    borderRadius="99999999px"
+                    cursor="pointer"
+                    _hover={{ filter: "brightness(80%)" }}
+                    onClick={() => handleRemoveImage(id)}
+                  >
+                    <MdIcon name="MdRemoveCircle" color="red" size="md" />
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </SimpleGrid>
         </Box>
       )}
       <Box position="absolute" top="24px" right="24px">
         <MdIcon
           name="MdImage"
-          color="#C7DAD9"
+          color={foreground}
           size="lg"
           onClick={() => setEditBackground(true)}
         />
@@ -301,11 +415,11 @@ function App() {
           padding="2"
           marginBottom="12"
           borderRadius="md"
-          bgColor="rgba(11, 49, 78, 0.3)"
+          bgColor={`rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`}
           boxShadow="0 4px 30px rgba(0, 0, 0, 0.2)"
           backdropFilter="blur(2px)"
           border="1px solid rgba(6, 25, 46, 0.06)"
-          color="#06192E"
+          color={foreground}
           textAlign="center"
         >
           <Text fontSize="1xl">{format(date, "dd/MM/yyyy")}</Text>
@@ -317,7 +431,7 @@ function App() {
           minWidth="100%"
           borderRadius="md"
           padding="4"
-          bgColor="rgba(11, 49, 78, 0.38)"
+          bgColor={`rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`}
           boxShadow="0 4px 30px rgba(0, 0, 0, 0.2)"
           backdropFilter="blur(2px)"
           border="1px solid rgba(6, 25, 46, 0.1)"
@@ -325,11 +439,12 @@ function App() {
           <Flex
             paddingX="4"
             height="110px"
-            bgColor="#06192E"
+            bgColor={background}
+            border={`1px solid ${foreground}`}
             borderRadius="md"
             align="flex-end"
             justify="flex-end"
-            color="#C7DAD9"
+            color={foreground}
             direction="column"
             paddingY="2"
           >
@@ -370,7 +485,7 @@ function App() {
               ))}
             </Box>
 
-            <Divider bgColor="#C7DAD9" />
+            <Divider bgColor={foreground} />
 
             <Box marginTop="1">
               <input
@@ -378,8 +493,8 @@ function App() {
                 value={applyRegex(String(operation))}
                 type="text"
                 style={{
-                  background: "#06192E",
-                  color: "#C7DAD9",
+                  background: background,
+                  color: foreground,
                   outline: "none",
                   fontWeight: "bold",
                   textAlign: "end",
