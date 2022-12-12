@@ -11,15 +11,19 @@ import {
   Text,
   useBreakpointValue,
 } from "@fugisaki/design-system";
+import extractColors from "extract-colors";
 
 const numpad = [7, 8, 9, "÷", 4, 5, 6, "×", 1, 2, 3, "-", 0, ",", "=", "+"];
 const characters = ["+", "-", "×", "÷"];
 
 function App() {
   const isMobile = useBreakpointValue({ base: true, sm: true, md: false });
+  const uploadRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [editBackground, setEditBackground] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(true);
   const [history, setHistory] = useState<string[]>([]);
   const [operation, setOperation] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
@@ -113,6 +117,24 @@ function App() {
     }
   };
 
+  const handleLoadImage = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const img = event.target;
+    if (!img || !img.files) return;
+    const file = img.files[0];
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const imageString = reader.result as string;
+      extractColors(imageString).then(console.log).catch(console.error);
+    };
+    reader.onerror = (error) => {
+      console.error("Error on load image", error);
+    };
+  };
+
   const getStyles = (value: number | string) => {
     if (typeof value === "string" && characters.includes(value)) {
       return {
@@ -182,6 +204,92 @@ function App() {
           height: "100%",
         }}
       />
+
+      {editBackground && (
+        <Box
+          zIndex={9999999}
+          position="absolute"
+          bgColor="#06192E"
+          height={{ base: "100%", sm: "100%", md: "540px" }}
+          maxWidth="800px"
+          width="100%"
+          borderRadius={{ base: "none", sm: "none", md: "md" }}
+        >
+          <Flex padding="2" justify="space-between" align="center">
+            <Flex>
+              <Button
+                variant={isUploading ? "solid" : "outline"}
+                color={isUploading ? "#06192E" : "#C7DAD9"}
+                _hover={{
+                  color: isUploading ? "#06192E" : "#C7DAD9",
+                  opacity: 0.8,
+                }}
+                _active={{
+                  color: isUploading ? "#06192E" : "#C7DAD9",
+                }}
+                size="sm"
+                marginRight="2"
+                onClick={() => setIsUploading(true)}
+              >
+                Upload de imagem
+              </Button>
+              <Button
+                variant={isUploading ? "outline" : "solid"}
+                color={!isUploading ? "#06192E" : "#C7DAD9"}
+                _hover={{
+                  color: !isUploading ? "#06192E" : "#C7DAD9",
+                  opacity: 0.8,
+                }}
+                _active={{
+                  color: !isUploading ? "#06192E" : "#C7DAD9",
+                }}
+                size="sm"
+                onClick={() => setIsUploading(false)}
+              >
+                Todas as imagens
+              </Button>
+            </Flex>
+
+            <MdIcon
+              name="MdClose"
+              color="#C7DAD9"
+              size="md"
+              onClick={() => setEditBackground(false)}
+            />
+          </Flex>
+
+          <Flex align="center" justify="center" height="86%">
+            <input
+              ref={uploadRef}
+              type="file"
+              hidden
+              onChange={handleLoadImage}
+            />
+            <Box
+              onClick={() => uploadRef.current?.click()}
+              border="2px dashed #C7DAD9"
+              padding="8"
+              width="500px"
+              cursor="pointer"
+              textAlign="center"
+              borderRadius="sm"
+            >
+              <MdIcon name="MdImage" color="#C7DAD9" size="lg" />
+              <Text color="#C7DAD9" fontWeight="semibold" marginTop="4">
+                Fazer upload de imagem
+              </Text>
+            </Box>
+          </Flex>
+        </Box>
+      )}
+      <Box position="absolute" top="24px" right="24px">
+        <MdIcon
+          name="MdImage"
+          color="#C7DAD9"
+          size="lg"
+          onClick={() => setEditBackground(true)}
+        />
+      </Box>
       <Box
         minWidth={{ base: "100%", sm: "300px" }}
         marginBottom="3"
